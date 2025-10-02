@@ -44,14 +44,28 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
       case "YouTube":
         final downloader = YoutubeDownloader();
         downloader.downloadVideo(
-          url,
+          url: url,
           onProgress: (progress) {
             setState(() {
               _progress = progress;
             });
           },
+          onError: (message) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          },
+          onComplete: (filePath) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Download completed!")),
+            );
+            setState(() {
+              _progress = 0;
+            });
+          },
         );
         break;
+
       case "TikTok":
         debugPrint("Download TikTok dari URL: $url");
         break;

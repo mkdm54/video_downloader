@@ -1,97 +1,107 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:flutter/foundation.dart';
+import 'package:gallery_saver_plus/gallery_saver.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class YoutubeDownloader {
   final yt = YoutubeExplode();
 
-  /// Minta izin sesuai versi Android
+  /// Meminta izin yang diperlukan untuk menyimpan media di Android.
   Future<void> requestPermission() async {
-    if (Platform.isAndroid) {
-      // Cek versi Android
-      final sdkInt = int.tryParse(
-        (await Process.run('getprop', [
-          'ro.build.version.sdk',
-        ])).stdout.toString().trim(),
-      );
+    // Izin tidak diperlukan untuk platform selain Android.
+    if (!Platform.isAndroid) return;
 
-      if (sdkInt != null && sdkInt >= 33) {
-        // ✅ Android 13 ke atas (API 33+)
-        var videoStatus = await Permission.videos.request();
-        var imageStatus = await Permission.photos.request();
-        var audioStatus = await Permission.audio.request();
+    // Untuk Android 13+, kita butuh izin individual untuk media.
+    // Jika salah satu diberikan, itu sudah cukup.
+    if (await Permission.videos.request().isGranted) return;
+    if (await Permission.photos.request().isGranted) return;
 
-        if (videoStatus.isDenied &&
-            imageStatus.isDenied &&
-            audioStatus.isDenied) {
-          throw Exception("Izin media ditolak.");
-        }
-      } else {
-        // ✅ Android 12 ke bawah
-        var status = await Permission.storage.request();
-        if (status.isDenied) {
-          throw Exception("Izin penyimpanan ditolak.");
-        }
-      }
-    }
+    // Fallback untuk Android versi lebih lama.
+    if (await Permission.storage.request().isGranted) return;
+
+    // Jika semua permintaan ditolak, lempar error.
+    throw Exception('Izin untuk menyimpan media ke galeri ditolak.');
   }
 
-  /// Download video YouTube
-  Future<void> downloadVideo(
-    String url, {
+  /// Mengunduh video dari URL YouTube dan menyimpannya ke galeri.
+  ///
+  /// [url]: URL video YouTube yang valid.
+  /// [onProgress]: Callback untuk melaporkan progres download (nilai antara 0.0 dan 1.0).
+  /// [onError]: Callback yang dipanggil jika terjadi kesalahan.
+  /// [onComplete]: Callback yang dipanggil setelah video berhasil diunduh dan disimpan.
+  Future<void> downloadVideo({
+    required String url,
     required void Function(double progress) onProgress,
+    required void Function(String message) onError,
+    required void Function(String filePath) onComplete,
   }) async {
     try {
-      // Pastikan izin diberikan
+      // Langkah 1: Meminta izin penyimpanan/media sebelum memulai.
       await requestPermission();
 
-      // Ambil informasi video
-      var video = await yt.videos.get(url);
+      // Langkah 2: Mengambil metadata video dari YouTube.
+      final video = await yt.videos.get(url);
       debugPrint("🎬 Judul Video: ${video.title}");
 
-      // Ambil manifest stream
-      var manifest = await yt.videos.streamsClient.getManifest(video.id);
+      // Langkah 3: Mengambil manifest stream dan memilih kualitas terbaik.
+      // Prioritas: Muxed (video+audio) > Video-only.
+      final manifest = await yt.videos.streamsClient.getManifest(video.id);
+      final streamInfo = manifest.muxed.isNotEmpty
+          ? manifest.muxed.withHighestBitrate()
+          : manifest.videoOnly.withHighestBitrate();
 
-      StreamInfo? streamInfo;
-      if (manifest.muxed.isNotEmpty) {
-        streamInfo = manifest.muxed.withHighestBitrate();
-      } else if (manifest.video.isNotEmpty) {
-        streamInfo = manifest.video.withHighestBitrate();
-      } else if (manifest.audio.isNotEmpty) {
-        streamInfo = manifest.audio.withHighestBitrate();
+      // Langkah 4: Menyiapkan path file sementara di direktori internal aplikasi.
+      // Ini adalah lokasi yang aman untuk menulis file sebelum memindahkannya ke galeri.
+      final tempDir = await getTemporaryDirectory();
+      final safeTitle = video.title
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), "_")
+          .trim();
+      final filePath = '${tempDir.path}/$safeTitle.mp4';
+      final file = File(filePath);
+
+      // Hapus file lama jika ada untuk menghindari konflik.
+      if (file.existsSync()) {
+        await file.delete();
       }
 
-      if (streamInfo == null) {
-        throw Exception('Tidak ada stream video yang cocok.');
+      // Langkah 5: Memulai proses streaming dan download.
+      final stream = yt.videos.streamsClient.get(streamInfo);
+      final fileStream = file.openWrite();
+      final totalBytes = streamInfo.size.totalBytes;
+      int downloadedBytes = 0;
+
+      await for (final chunk in stream) {
+        downloadedBytes += chunk.length;
+        fileStream.add(chunk);
+
+        // Melaporkan progres ke UI
+        if (totalBytes > 0) {
+          onProgress(downloadedBytes / totalBytes);
+        }
       }
 
-      // Simpan ke folder Download
-      final dir = Directory("/storage/emulated/0/Download");
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
+      await fileStream.flush();
+      await fileStream.close();
+
+      debugPrint("✅ Berhasil diunduh ke direktori sementara: $filePath");
+
+      // Langkah 6: Menyimpan file video dari path sementara ke galeri publik.
+      final bool? saved = await GallerySaver.saveVideo(filePath);
+      if (saved == true) {
+        debugPrint("📂 Berhasil disimpan ke Galeri");
+        onComplete(filePath);
+      } else {
+        throw Exception(
+          "Gagal menyimpan ke Galeri (GallerySaver mengembalikan false).",
+        );
       }
-
-      // Pastikan nama file aman
-      final safeTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), "_");
-      final filePath = "${dir.path}/$safeTitle.mp4";
-
-      var dio = Dio();
-      await dio.download(
-        streamInfo.url.toString(),
-        filePath,
-        onReceiveProgress: (count, total) {
-          if (total != -1) {
-            onProgress(count / total);
-          }
-        },
-      );
-
-      debugPrint("✅ Video tersimpan di: $filePath");
     } catch (e) {
-      debugPrint("❌ Error: $e");
+      debugPrint("❌ Terjadi error saat download/simpan: $e");
+      onError(e.toString());
     } finally {
+      // Selalu tutup koneksi YoutubeExplode untuk membersihkan resources.
       yt.close();
     }
   }
