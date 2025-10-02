@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_downloader/components/custom_button.dart';
+import 'package:video_downloader/tools/youtube_downloader.dart';
 
 class VideoDownloaderApp extends StatefulWidget {
   const VideoDownloaderApp({super.key});
@@ -14,6 +15,8 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
   final TextEditingController _urlController = TextEditingController();
   final List<String> platforms = ["YouTube", "TikTok", "Instagram"];
 
+  double _progress = 0;
+
   @override
   void initState() {
     super.initState();
@@ -23,7 +26,6 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
   @override
   void dispose() {
     _tabController.dispose();
-    _urlController.dispose();
     super.dispose();
   }
 
@@ -35,12 +37,20 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Masukkan URL terlebih dahulu")),
       );
-
       return;
     }
+
     switch (currentTab) {
       case "YouTube":
-        debugPrint("Download YouTube dari URL: $url");
+        final downloader = YoutubeDownloader();
+        downloader.downloadVideo(
+          url,
+          onProgress: (progress) {
+            setState(() {
+              _progress = progress;
+            });
+          },
+        );
         break;
       case "TikTok":
         debugPrint("Download TikTok dari URL: $url");
@@ -49,9 +59,6 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
         debugPrint("Download Instagram dari URL: $url");
         break;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Sedang download dari $currentTab...")),
-    );
   }
 
   @override
@@ -64,12 +71,26 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
         title: const Text("Video Downloader"),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Color(0xFF6200EE), // warna label aktif
-          unselectedLabelColor: Colors.grey, // warna label tidak aktif
+          labelColor: Color(0xFF6200EE),
+          unselectedLabelColor: Colors.grey,
           tabs: platforms.map((platform) => Tab(text: platform)).toList(),
         ),
       ),
-      body: UrlVideo(urlController: _urlController, onDownload: _download),
+      body: Column(
+        children: [
+          Expanded(
+            child: UrlVideo(
+              urlController: _urlController,
+              onDownload: _download,
+            ),
+          ),
+          if (_progress > 0 && _progress < 1)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: LinearProgressIndicator(value: _progress),
+            ),
+        ],
+      ),
     );
   }
 }
