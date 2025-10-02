@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 
 class YoutubeDownloader extends StatelessWidget {
-  const YoutubeDownloader({super.key});
+  final String link;
+  const YoutubeDownloader({super.key, required this.link});
 
   @override
   Widget build(BuildContext context) {
-    return const Placeholder();
+    return Center(
+      child: ElevatedButton(
+        onPressed: () {
+          // Disini proses download video YouTube pakai link
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Download YouTube: $link")));
+        },
+        child: const Text("Download YouTube Video"),
+      ),
+    );
   }
 }
