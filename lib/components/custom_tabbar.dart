@@ -28,7 +28,15 @@ class _CustomTabbarState extends State<CustomTabbar> {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: Container(
-        color: Colors.deepPurple,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 8,
+            ),
+          ],
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -49,11 +57,11 @@ class _CustomTabbarState extends State<CustomTabbar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.amber : Colors.white70),
+            Icon(icon, color: isSelected ? Color(0xFF6200EE) : Colors.grey),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.amber : Colors.white70,
+                color: isSelected ? Color(0xFF6200EE) : Colors.grey,
                 fontSize: 12,
               ),
             ),

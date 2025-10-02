@@ -57,10 +57,15 @@ class _VideoDownloaderAppState extends State<VideoDownloaderApp>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         title: const Text("Video Downloader"),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Color(0xFF6200EE), // warna label aktif
+          unselectedLabelColor: Colors.grey, // warna label tidak aktif
           tabs: platforms.map((platform) => Tab(text: platform)).toList(),
         ),
       ),
@@ -92,7 +97,7 @@ class UrlVideo extends StatelessWidget {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              prefixIcon: const Icon(Icons.link),
+              prefixIcon: const Icon(Icons.link, color: Color(0xFF6200EE)),
             ),
           ),
           const SizedBox(height: 20),
